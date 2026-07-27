@@ -24,3 +24,39 @@ window.open = function (url, target, features) {
 }
 
 document.addEventListener('click', hookClick, { capture: true })
+
+// ==================== 新增：视频全屏自动横屏 【原有逻辑完全未改动】 ====================
+function lockLandscape() {
+    if (screen?.orientation?.lock) {
+        screen.orientation.lock('landscape-primary').catch(err => console.log('横屏锁定失败', err))
+    }
+}
+
+function unlockOrientation() {
+    if (screen?.orientation?.unlock) {
+        screen.orientation.unlock()
+    }
+}
+
+// 全局页面全屏监听
+document.addEventListener('fullscreenchange', () => {
+    document.fullscreenElement ? lockLandscape() : unlockOrientation()
+})
+document.addEventListener('webkitfullscreenchange', () => {
+    document.webkitFullscreenElement ? lockLandscape() : unlockOrientation()
+})
+
+// 单独监听video视频进入/退出全屏（自动播放触发全屏生效）
+document.addEventListener('webkitenterfullscreen', (e) => {
+    if (e.target.tagName === 'VIDEO') lockLandscape()
+}, true)
+document.addEventListener('webkitleavefullscreen', (e) => {
+    if (e.target.tagName === 'VIDEO') unlockOrientation()
+}, true)
+
+document.addEventListener('enterfullscreen', (e) => {
+    if (e.target.tagName === 'VIDEO') lockLandscape()
+}, true)
+document.addEventListener('leavefullscreen', (e) => {
+    if (e.target.tagName === 'VIDEO') unlockOrientation()
+}, true)

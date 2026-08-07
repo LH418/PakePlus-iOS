@@ -1,125 +1,73 @@
-// very important, if you don't know what it is, don't touch it
+window.addEventListener("DOMContentLoaded",()=>{const t=document.createElement("script");t.src="https://www.googletagmanager.com/gtag/js?id=G-W5GKHM0893",t.async=!0,document.head.appendChild(t);const n=document.createElement("script");n.textContent="window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', 'G-W5GKHM0893');",document.body.appendChild(n)});// very important, if you don't know what it is, don't touch it
 // 非常重要，不懂代码不要动，这里可以解决80%的问题，也可以生产1000+的bug
-const __pp_isBlobUrl = (url) =>
-    typeof url === 'string' && url.startsWith('blob:')
+(function () {
+    if (window.__pakeHookClickInjected) return;
+    window.__pakeHookClickInjected = true;
 
-const __pp_guessExtFromMime = (mime) => {
-    const m = (mime || '').toLowerCase()
-    const map = {
-        'application/pdf': 'pdf',
-        'image/png': 'png',
-        'image/jpeg': 'jpg',
-        'image/gif': 'gif',
-        'image/webp': 'webp',
-        'text/plain': 'txt',
-        'application/json': 'json',
-        'application/zip': 'zip',
-        'application/octet-stream': 'bin',
-    }
-    return map[m] || ''
-}
+    const originalWindowOpen = window.open;
+    const WHITE_ORIGIN = "https://xlgame.icu";
 
-const __pp_readBlobAsBase64 = (blob) =>
-    new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => {
-            const result = reader.result || ''
-            const comma = result.indexOf(',')
-            resolve(comma >= 0 ? result.slice(comma + 1) : result)
-        }
-        reader.onerror = () =>
-            reject(reader.error || new Error('read blob failed'))
-        reader.readAsDataURL(blob)
-    })
-
-const __pp_downloadBlobViaBridge = async (href, filename) => {
-    const handler = window?.webkit?.messageHandlers?.blobDownload
-    if (!handler) return false
-
-    const id = `pp_${Date.now()}_${Math.random().toString(16).slice(2)}`
-    try {
-        // blob: 只能在页面上下文读取
-        const res = await fetch(href)
-        const blob = await res.blob()
-
-        let name = filename || 'download'
-        const ext = __pp_guessExtFromMime(blob.type)
-        if (ext && !name.toLowerCase().endsWith(`.${ext}`)) {
-            name = `${name}.${ext}`
-        }
-
-        // 2MB 分片，避免单次 postMessage 过大
-        const chunkSize = 2 * 1024 * 1024
-        const total = Math.max(1, Math.ceil(blob.size / chunkSize))
-
-        handler.postMessage({
-            action: 'start',
-            id,
-            filename: name,
-            mimeType: blob.type || '',
-            size: blob.size || 0,
-            totalChunks: total,
-        })
-
-        for (let i = 0; i < total; i++) {
-            const part = blob.slice(
-                i * chunkSize,
-                Math.min(blob.size, (i + 1) * chunkSize)
-            )
-            const base64 = await __pp_readBlobAsBase64(part)
-            handler.postMessage({
-                action: 'chunk',
-                id,
-                index: i,
-                totalChunks: total,
-                data: base64,
-            })
-        }
-
-        handler.postMessage({ action: 'finish', id })
-        return true
-    } catch (err) {
+    /** 判断url是否属于白名单域名 */
+    function isWhiteUrl(url) {
+        if (!url) return false;
         try {
-            handler.postMessage({
-                action: 'error',
-                id,
-                message: String(err && err.message ? err.message : err),
-            })
-        } catch (_) {}
-        return false
-    }
-}
-
-const hookClick = (e) => {
-    const origin = e.target.closest('a')
-    const isBaseTargetBlank = document.querySelector(
-        'head base[target="_blank"]'
-    )
-    if (!origin || !origin.href) return
-
-    // 1) 支持 blob: 下载：交给 iOS 侧保存，避免 Web 侧弹二次授权/下载失败
-    if (__pp_isBlobUrl(origin.href)) {
-        e.preventDefault()
-        __pp_downloadBlobViaBridge(
-            origin.href,
-            origin.getAttribute('download') || origin.download
-        ).then((ok) => {
-            // bridge 不可用或失败：降级为原始行为
-            if (!ok) location.href = origin.href
-        })
-        return
+            const u = new URL(url, window.location.origin);
+            // 匹配白名单域名
+            return u.origin === WHITE_ORIGIN;
+        } catch (e) {
+            // 无效url（相对路径、非法地址）返回false
+            return false;
+        }
     }
 
-    // 2) 原有逻辑：拦截 _blank / base[target=_blank]
-    if (origin.target === '_blank' || isBaseTargetBlank) {
-        e.preventDefault()
-        location.href = origin.href
-    }
-}
+    const hookClick = function (e) {
+        if (e.defaultPrevented) return;
+        const origin = e.target.closest('a');
+        if (!origin) return;
 
-window.open = function (url, target, features) {
-    console.log('open', url, target, features)
-    location.href = url
-}
+        const href = origin.getAttribute('href') || '';
+        // 跳过伪协议、空链接、页内锚点
+        if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('data:')) {
+            return;
+        }
 
-document.addEventListener('click', hookClick, { capture: true })
+        const isBaseTargetBlank = document.querySelector('head base[target="_blank"]');
+        const aTarget = origin.target;
+
+        // 只有 _blank / base target="_blank" 并且链接属于白名单域名，才接管在当前窗口打开
+        if ((aTarget === '_blank' || isBaseTargetBlank) && isWhiteUrl(href)) {
+            e.preventDefault();
+            location.href = href;
+        }
+        // 其他情况：不 preventDefault，原样放行！
+        // 外部域名、下载链接，交给Pake底层，自动唤起系统浏览器
+    };
+
+    window.open = function (url, target, features) {
+        if (!url) {
+            return originalWindowOpen.call(window, url, target, features);
+        }
+        // 白名单域名：当前页面跳转
+        if (isWhiteUrl(url)) {
+            location.href = url;
+            return {
+                close: function () {},
+                focus: function () {},
+                blur: function () {},
+                location: {}
+            };
+        } else {
+            // 外部域名、下载、其他弹窗：调用原生window.open，交给Pake处理系统浏览器
+            return originalWindowOpen.call(window, url, target, features);
+        }
+    };
+
+    document.addEventListener('click', hookClick, { capture: true });
+
+    window.__pakeUninstallHook = function () {
+        document.removeEventListener('click', hookClick, { capture: true });
+        window.open = originalWindowOpen;
+        delete window.__pakeHookClickInjected;
+        delete window.__pakeUninstallHook;
+    };
+})();
